@@ -1,62 +1,66 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
-from auth import require_role, get_current_active_user
+from auth import get_current_active_user, require_role
+from constants import SubmissionStatus, UserRole
 from db import get_db
-from models import CollectionPeriod, User, UserRole, ScheduleEntry
+from models import CollectionPeriod, ScheduleSubmission, User
+from schedule_service import build_period_holidays, get_period_for_user
 from schemas import CollectionPeriodCreate, CollectionPeriodOut
 
 router = APIRouter(prefix="/periods", tags=["periods"])
 
 
-@router.get("/current", response_model=Optional[CollectionPeriodOut])
+def period_to_schema(period: CollectionPeriod) -> CollectionPeriodOut:
+    data = CollectionPeriodOut.model_validate(period)
+    data.holidays = build_period_holidays(period)
+    return data
+
+
+@router.get("/current", response_model=CollectionPeriodOut | None)
 def get_current_period(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    # Если у пользователя нет альянса, возвращаем None
     if not current_user.alliance:
         return None
 
-    # Получаем период для альянса пользователя
     period = (
         db.query(CollectionPeriod)
         .filter(
             CollectionPeriod.is_open.is_(True),
-            CollectionPeriod.alliance == current_user.alliance
+            CollectionPeriod.alliance == current_user.alliance,
         )
         .order_by(CollectionPeriod.created_at.desc())
         .first()
     )
-    return period
+    if not period:
+        return None
+    return period_to_schema(period)
 
 
 @router.post("", response_model=CollectionPeriodOut, status_code=status.HTTP_201_CREATED)
 def create_period(
     payload: CollectionPeriodCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    alliance = payload.alliance or current_user.alliance
+    if current_user.role == UserRole.MANAGER.value and alliance != current_user.alliance:
+        raise HTTPException(status_code=403, detail="Руководитель может создавать периоды только для своей группы")
 
-    if not current_user.alliance:
-        raise HTTPException(status_code=400, detail="У пользователя не указан альянс")
-
-    # Закрываем существующие открытые периоды для этого альянса
     db.query(CollectionPeriod).filter(
         CollectionPeriod.is_open.is_(True),
-        CollectionPeriod.alliance == current_user.alliance
-    ).update(
-        {"is_open": False, "updated_at": datetime.now(timezone.utc)}
-    )
+        CollectionPeriod.alliance == alliance,
+    ).update({"is_open": False, "updated_at": datetime.now(timezone.utc)})
 
     period = CollectionPeriod(
-        alliance=current_user.alliance,
+        name=payload.name,
+        alliance=alliance,
         period_start=payload.period_start,
         period_end=payload.period_end,
         deadline=payload.deadline,
@@ -65,135 +69,133 @@ def create_period(
     db.add(period)
     db.commit()
     db.refresh(period)
-    return period
+    return period_to_schema(period)
 
 
 @router.post("/{period_id}/close", response_model=CollectionPeriodOut)
 def close_period(
     period_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-
     period = db.query(CollectionPeriod).filter(CollectionPeriod.id == period_id).first()
     if not period:
         raise HTTPException(status_code=404, detail="Период не найден")
-
-    # Проверяем, что период принадлежит альянсу пользователя
-    if current_user.role == UserRole.MANAGER and period.alliance != current_user.alliance:
+    if current_user.role == UserRole.MANAGER.value and period.alliance != current_user.alliance:
         raise HTTPException(status_code=403, detail="Нет доступа к этому периоду")
 
     period.is_open = False
     period.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(period)
-    return period
+    return period_to_schema(period)
 
 
 @router.get("/current/stats")
 def get_current_period_stats(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
+    db: Session = Depends(get_db),
 ):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-
-    period = db.query(CollectionPeriod).filter(
-        CollectionPeriod.is_open == True,
-        CollectionPeriod.alliance == current_user.alliance
-    ).first()
-    if not period:
-        return {
-            "total_employees": 0,
-            "submitted_count": 0,
-            "pending_count": 0
-        }
-
-    # Фильтруем по альянсу
-    user_query = db.query(User).filter(
-        User.is_verified == True,
-        User.alliance == current_user.alliance
+    period = (
+        db.query(CollectionPeriod)
+        .filter(
+            CollectionPeriod.is_open.is_(True),
+            CollectionPeriod.alliance == current_user.alliance,
+        )
+        .order_by(CollectionPeriod.created_at.desc())
+        .first()
     )
+    if not period:
+        return {"totalEmployees": 0, "submittedCount": 0, "pendingCount": 0}
 
-    total_employees = user_query.count()
-
-    # Сколько внесли графики
-    submitted_query = db.query(func.count(func.distinct(ScheduleEntry.user_id))).filter(
-        ScheduleEntry.period_id == period.id
-    ).join(User).filter(User.alliance == current_user.alliance)
-
-    submitted_count = submitted_query.scalar()
-
-    pending_count = total_employees - submitted_count
-
+    employees = (
+        db.query(User)
+        .filter(
+            User.alliance == current_user.alliance,
+            User.role == UserRole.EMPLOYEE.value,
+            User.is_verified.is_(True),
+        )
+        .all()
+    )
+    submitted_count = (
+        db.query(ScheduleSubmission)
+        .join(User, User.id == ScheduleSubmission.user_id)
+        .filter(
+            ScheduleSubmission.period_id == period.id,
+            ScheduleSubmission.status == SubmissionStatus.SUBMITTED.value,
+            User.alliance == current_user.alliance,
+        )
+        .count()
+    )
+    total = len(employees)
     return {
-        "total_employees": total_employees,
-        "submitted_count": submitted_count,
-        "pending_count": pending_count
+        "totalEmployees": total,
+        "submittedCount": submitted_count,
+        "pendingCount": max(total - submitted_count, 0),
     }
 
 
 @router.get("/current/submissions")
 def get_current_period_submissions(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
+    db: Session = Depends(get_db),
 ):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-
-    period = db.query(CollectionPeriod).filter(
-        CollectionPeriod.is_open == True,
-        CollectionPeriod.alliance == current_user.alliance
-    ).first()
+    period = (
+        db.query(CollectionPeriod)
+        .filter(
+            CollectionPeriod.is_open.is_(True),
+            CollectionPeriod.alliance == current_user.alliance,
+        )
+        .order_by(CollectionPeriod.created_at.desc())
+        .first()
+    )
     if not period:
         return {"submitted": [], "pending": []}
 
-    # Фильтруем по альянсу
-    user_query = db.query(User).filter(
-        User.is_verified == True,
-        User.alliance == current_user.alliance
+    employees = (
+        db.query(User)
+        .filter(
+            User.alliance == current_user.alliance,
+            User.role == UserRole.EMPLOYEE.value,
+            User.is_verified.is_(True),
+        )
+        .order_by(User.full_name.asc())
+        .all()
     )
-
-    all_users = user_query.all()
-
-    # Получаем пользователей, которые внесли графики
-    submitted_user_ids = db.query(ScheduleEntry.user_id).filter(
-        ScheduleEntry.period_id == period.id
-    ).distinct().all()
-    submitted_ids = {uid[0] for uid in submitted_user_ids}
+    submission_map = {
+        submission.user_id: submission
+        for submission in db.query(ScheduleSubmission).filter(ScheduleSubmission.period_id == period.id).all()
+    }
 
     submitted = []
     pending = []
-
-    for user in all_users:
-        user_data = {
-            "id": user.id,
-            "full_name": user.full_name or user.email,
-            "email": user.email,
-            "alliance": user.alliance
+    for employee in employees:
+        item = {
+            "id": employee.id,
+            "fullName": employee.full_name,
+            "email": employee.email,
+            "group": employee.alliance,
+            "status": submission_map.get(employee.id).status if submission_map.get(employee.id) else "draft",
         }
-        if user.id in submitted_ids:
-            submitted.append(user_data)
+        if item["status"] == SubmissionStatus.SUBMITTED.value:
+            submitted.append(item)
         else:
-            pending.append(user_data)
-
+            pending.append(item)
     return {"submitted": submitted, "pending": pending}
 
 
-@router.get("/history")
+@router.get("/history", response_model=list[CollectionPeriodOut])
 def get_periods_history(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
+    db: Session = Depends(get_db),
 ):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
-
-    # Получаем все периоды для альянса пользователя
-    periods = db.query(CollectionPeriod).filter(
-        CollectionPeriod.alliance == current_user.alliance
-    ).order_by(CollectionPeriod.created_at.desc()).all()
-
-    return periods
-
+    if current_user.role == UserRole.ADMIN.value:
+        periods = db.query(CollectionPeriod).order_by(CollectionPeriod.created_at.desc()).all()
+    else:
+        periods = (
+            db.query(CollectionPeriod)
+            .filter(CollectionPeriod.alliance == current_user.alliance)
+            .order_by(CollectionPeriod.created_at.desc())
+            .all()
+        )
+    return [period_to_schema(period) for period in periods]

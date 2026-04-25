@@ -37,7 +37,7 @@ def create_template(
         shift_end=payload.shift_end,
         has_break=payload.has_break,
         break_start=payload.break_start,
-        break_end=payload.break_end
+        break_end=payload.break_end,
     )
     db.add(template)
     db.commit()

@@ -1,46 +1,30 @@
-import enum
-from datetime import datetime, date
+from __future__ import annotations
+
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
     Date,
     DateTime,
-    Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import JSON as SAJSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from db import Base
 
 
-class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    MANAGER = "manager"
-    USER = "user"
+json_type = SAJSON().with_variant(JSONB, "postgresql")
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String(32), unique=True, index=True, nullable=True)  # e.g. "6505365461"
-    email = Column(String(255), unique=True, index=True, nullable=True)
-    password_hash = Column(String(255), nullable=True)
-
-    registered = Column(Boolean, default=False, nullable=False)
-    is_verified = Column(Boolean, default=False, nullable=False)
-
-    full_name = Column(Text, nullable=True)
-    alliance = Column(Text, nullable=True)
-    category = Column(String(64), nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
-
+class TimestampMixin:
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
@@ -49,11 +33,34 @@ class User(Base):
         nullable=False,
     )
 
+
+class User(TimestampMixin, Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(32), unique=True, index=True, nullable=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    registered = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    full_name = Column(Text, nullable=False)
+    alliance = Column(Text, nullable=False, index=True)
+    role = Column(String(32), default="employee", nullable=False, index=True)
+    employee_category = Column(String(64), default="adult", nullable=False)
+    weekly_norm_hours = Column(Float, nullable=True)
+
     schedules = relationship("ScheduleEntry", back_populates="user", cascade="all, delete-orphan")
     verification_tokens = relationship(
-        "VerificationToken", back_populates="user", cascade="all, delete-orphan"
+        "VerificationToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     templates = relationship("ScheduleTemplate", back_populates="user", cascade="all, delete-orphan")
+    submissions = relationship(
+        "ScheduleSubmission",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class VerificationToken(Base):
@@ -69,60 +76,74 @@ class VerificationToken(Base):
     user = relationship("User", back_populates="verification_tokens")
 
 
-class ScheduleEntry(Base):
+class CollectionPeriod(TimestampMixin, Base):
+    __tablename__ = "collection_periods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    alliance = Column(Text, nullable=False, index=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    deadline = Column(DateTime(timezone=True), nullable=False)
+    is_open = Column(Boolean, default=True, nullable=False, index=True)
+
+    schedules = relationship("ScheduleEntry", back_populates="period", cascade="all, delete-orphan")
+    submissions = relationship(
+        "ScheduleSubmission",
+        back_populates="period",
+        cascade="all, delete-orphan",
+    )
+
+
+class ScheduleEntry(TimestampMixin, Base):
     __tablename__ = "schedule_entries"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    period_id = Column(Integer, ForeignKey("collection_periods.id", ondelete="CASCADE"), nullable=False)  # новое поле
+    period_id = Column(Integer, ForeignKey("collection_periods.id", ondelete="CASCADE"), nullable=False)
     day = Column(Date, nullable=False)
     status = Column(String(128), nullable=False)
-    meta = Column(JSONB, nullable=True)
-
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    meta = Column(json_type, nullable=False, default=dict)
 
     user = relationship("User", back_populates="schedules")
-    period = relationship("CollectionPeriod")
+    period = relationship("CollectionPeriod", back_populates="schedules")
 
-    __table_args__ = (UniqueConstraint("user_id", "period_id", "day", name="uq_schedule_user_period_day"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "period_id", "day", name="uq_schedule_user_period_day"),
+    )
 
 
-class ScheduleTemplate(Base):
+class ScheduleSubmission(TimestampMixin, Base):
+    __tablename__ = "schedule_submissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    period_id = Column(Integer, ForeignKey("collection_periods.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(32), nullable=False, default="draft")
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    employee_comment = Column(Text, nullable=True)
+    manager_comment = Column(Text, nullable=True)
+
+    user = relationship("User", back_populates="submissions")
+    period = relationship("CollectionPeriod", back_populates="submissions")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "period_id", name="uq_submission_user_period"),
+    )
+
+
+class ScheduleTemplate(TimestampMixin, Base):
     __tablename__ = "schedule_templates"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String(255), nullable=False)  # "5/2, 09:00-18:15"
-    work_days = Column(Integer, nullable=False)  # 5
-    rest_days = Column(Integer, nullable=False)  # 2
-    shift_start = Column(String(5), nullable=False)  # "09:00"
-    shift_end = Column(String(5), nullable=False)  # "18:15"
+    name = Column(String(255), nullable=False)
+    work_days = Column(Integer, nullable=False)
+    rest_days = Column(Integer, nullable=False)
+    shift_start = Column(String(5), nullable=False)
+    shift_end = Column(String(5), nullable=False)
     has_break = Column(Boolean, default=False, nullable=False)
-    break_start = Column(String(5), nullable=True)  # "14:30"
-    break_end = Column(String(5), nullable=True)  # "17:00"
-
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    break_start = Column(String(5), nullable=True)
+    break_end = Column(String(5), nullable=True)
 
     user = relationship("User", back_populates="templates")
-
-
-class CollectionPeriod(Base):
-    __tablename__ = "collection_periods"
-
-    id = Column(Integer, primary_key=True, index=True)
-    alliance = Column(Text, nullable=False, index=True)  # привязка к альянсу
-    period_start = Column(Date, nullable=False)
-    period_end = Column(Date, nullable=False)
-    deadline = Column(DateTime(timezone=True), nullable=False)
-    is_open = Column(Boolean, default=False, nullable=False)
-
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False,
-    )
-

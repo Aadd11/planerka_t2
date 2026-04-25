@@ -1,52 +1,52 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
 
+from auth import get_current_verified_user, require_role
+from constants import UserRole
 from db import get_db
-from models import User, UserRole
-from schemas import UserOut
-from auth import get_current_active_user
+from models import User
+from schedule_service import get_weekly_norm_hours
+from schemas import AdminAllianceUpdate, AdminRoleUpdate, UserOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-def require_admin(current_user: User = Depends(get_current_active_user)):
-    if current_user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise HTTPException(status_code=403, detail="Требуются права администратора")
+
+def require_admin(current_user: User = Depends(require_role(UserRole.ADMIN))) -> User:
     return current_user
 
-@router.get("/users", response_model=List[UserOut])
-def get_users(
-    verified: Optional[bool] = None,
-    alliance: Optional[str] = None,
-    role: Optional[UserRole] = None,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    query = db.query(User)
 
-    if current_user.role == UserRole.ADMIN:
-        pass
-    elif current_user.role == UserRole.MANAGER:
-        if not alliance:
-            alliance = current_user.alliance
-        query = query.filter(User.alliance == alliance)
-    else:
+@router.get("/users", response_model=list[UserOut])
+def get_users(
+    verified: bool | None = None,
+    alliance: str | None = None,
+    role: str | None = None,
+    current_user: User = Depends(get_current_verified_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
 
-    if verified is not None:
-        query = query.filter(User.is_verified == verified)
-    if alliance:
+    query = db.query(User)
+    if current_user.role == UserRole.MANAGER.value:
+        query = query.filter(User.alliance == current_user.alliance)
+    elif alliance:
         query = query.filter(User.alliance == alliance)
+
+    if verified is not None:
+        query = query.filter(User.is_verified.is_(verified))
     if role:
         query = query.filter(User.role == role)
 
-    return query.all()
+    return query.order_by(User.full_name.asc()).all()
+
 
 @router.put("/users/{user_id}/verify", response_model=UserOut)
 def verify_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin)
+    _: User = Depends(require_admin),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -56,44 +56,49 @@ def verify_user(
     db.refresh(user)
     return user
 
+
+@router.put("/users/{user_id}/role", response_model=UserOut)
+def change_role(
+    user_id: int,
+    payload: AdminRoleUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    user.role = payload.role.value
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}/alliance", response_model=UserOut)
+def change_alliance(
+    user_id: int,
+    payload: AdminAllianceUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    user.alliance = payload.alliance
+    if user.role == UserRole.EMPLOYEE.value:
+        user.weekly_norm_hours = get_weekly_norm_hours(user.employee_category)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin)
+    _: User = Depends(require_admin),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     db.delete(user)
     db.commit()
-
-@router.put("/users/{user_id}/role", response_model=UserOut)
-def change_role(
-    user_id: int,
-    new_role: UserRole,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    user.role = new_role
-    db.commit()
-    db.refresh(user)
-    return user
-
-@router.put("/users/{user_id}/alliance", response_model=UserOut)
-def change_alliance(
-    user_id: int,
-    new_alliance: str,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    user.alliance = new_alliance
-    db.commit()
-    db.refresh(user)
-    return user
