@@ -11,7 +11,7 @@ from schemas import ScheduleTemplateCreate, ScheduleTemplateOut
 router = APIRouter(prefix="/templates", tags=["templates"])
 
 
-@router.get("", response_model=List[ScheduleTemplateOut])
+@router.get("", response_model=List[ScheduleTemplateOut], summary="Список шаблонов текущего пользователя")
 def get_my_templates(
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)
@@ -22,7 +22,7 @@ def get_my_templates(
     return templates
 
 
-@router.post("", response_model=ScheduleTemplateOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ScheduleTemplateOut, status_code=status.HTTP_201_CREATED, summary="Создать шаблон")
 def create_template(
     payload: ScheduleTemplateCreate,
     current_user: User = Depends(get_current_verified_user),
@@ -45,7 +45,7 @@ def create_template(
     return template
 
 
-@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить шаблон")
 def delete_template(
     template_id: int,
     current_user: User = Depends(get_current_verified_user),

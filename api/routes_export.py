@@ -139,7 +139,7 @@ def _build_workbook(db: Session, period: CollectionPeriod) -> Path:
     return temp_path
 
 
-@router.get("/schedule")
+@router.get("/schedule", summary="Экспорт расписаний в Excel")
 def export_schedule(
     background_tasks: BackgroundTasks,
     period_id: int | None = Query(default=None, alias="period_id"),

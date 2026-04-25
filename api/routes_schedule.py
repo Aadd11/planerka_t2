@@ -113,7 +113,12 @@ def _persist_schedule(
     return _bundle_for_user(db, user, period.id)
 
 
-@router.get("/me", response_model=ScheduleBundleOut)
+@router.get(
+    "/me",
+    response_model=ScheduleBundleOut,
+    summary="Получить свой график",
+    description="Возвращает текущий график сотрудника, submission status и результат backend-валидации.",
+)
 def get_my_schedule(
     period_id: int | None = Query(default=None, alias="period_id"),
     current_user: User = Depends(get_current_verified_user),
@@ -124,7 +129,11 @@ def get_my_schedule(
     return _bundle_for_user(db, current_user, period.id)
 
 
-@router.put("/me", response_model=ScheduleBundleOut)
+@router.put(
+    "/me",
+    response_model=ScheduleBundleOut,
+    summary="Сохранить график как черновик",
+)
 def update_my_schedule(
     payload: ScheduleBulkUpdate,
     period_id: int | None = Query(default=None, alias="period_id"),
@@ -135,7 +144,12 @@ def update_my_schedule(
     return _persist_schedule(db=db, user=current_user, period_id=period.id, payload=payload)
 
 
-@router.post("/me/submit", response_model=ScheduleBundleOut)
+@router.post(
+    "/me/submit",
+    response_model=ScheduleBundleOut,
+    summary="Отправить график",
+    description="Перед отправкой выполняет backend-валидацию. Ошибки блокируют submit.",
+)
 def submit_my_schedule(
     period_id: int | None = Query(default=None, alias="period_id"),
     current_user: User = Depends(get_current_verified_user),
@@ -159,7 +173,12 @@ def submit_my_schedule(
     return _bundle_for_user(db, current_user, period.id)
 
 
-@router.post("/validate", response_model=ScheduleValidationResponse)
+@router.post(
+    "/validate",
+    response_model=ScheduleValidationResponse,
+    summary="Проверить график",
+    description="Проверяет интервалы, недельные нормы, запреты на ночную работу и минимальное число выходных.",
+)
 def validate_schedule_endpoint(
     payload: ScheduleValidateRequest,
     current_user: User = Depends(get_current_verified_user),
@@ -178,7 +197,12 @@ def validate_schedule_endpoint(
     )
 
 
-@router.get("/by-user/{user_id}", response_model=ScheduleBundleOut)
+@router.get(
+    "/by-user/{user_id}",
+    response_model=ScheduleBundleOut,
+    summary="Получить график сотрудника по id",
+    description="Доступно руководителю своей группы и admin.",
+)
 def get_schedule_for_user(
     user_id: int,
     period_id: int | None = Query(default=None, alias="period_id"),

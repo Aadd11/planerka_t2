@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
-from types import SimpleNamespace
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
@@ -36,7 +36,16 @@ def test_register_and_login(db_session):
     user.is_verified = True
     db_session.commit()
 
-    token = login(SimpleNamespace(username="ivan@example.com", password="password123"), db_session)
+    class JsonLoginRequest:
+        headers = {"content-type": "application/json"}
+
+        async def json(self):
+            return {"email": "ivan@example.com", "password": "password123"}
+
+        async def form(self):
+            return {}
+
+    token = asyncio.run(login(JsonLoginRequest(), db_session))
     assert token.access_token
 
 

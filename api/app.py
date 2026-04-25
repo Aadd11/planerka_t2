@@ -17,8 +17,24 @@ from routes_templates import router as templates_router
 def create_app() -> FastAPI:
     app = FastAPI(
         title="T2 Schedule Planner API",
-        description="REST API for T2 Schedule Planner demo product",
-        version="2.0.0",
+        description=(
+            "Backend API для T2 Schedule Planner. "
+            "Поддерживает регистрацию и логин, периоды сбора, "
+            "расписания сотрудников, backend-валидацию норм рабочего времени, "
+            "комментарии руководителя, coverage и экспорт."
+        ),
+        version="2.1.0",
+        contact={"name": "T2 Schedule Planner Hackathon Team"},
+        openapi_tags=[
+            {"name": "auth", "description": "Регистрация, логин, верификация и профиль текущего пользователя."},
+            {"name": "schedules", "description": "Черновики, отправка и проверка графиков сотрудников."},
+            {"name": "periods", "description": "Управление периодами сбора графиков и статистикой по ним."},
+            {"name": "manager", "description": "Инструменты руководителя: матрица, комментарии, coverage."},
+            {"name": "admin", "description": "Управление пользователями, ролями и группами."},
+            {"name": "export", "description": "Экспорт графиков в Excel."},
+            {"name": "templates", "description": "Шаблоны повторяющихся графиков сотрудника."},
+            {"name": "system", "description": "Технические служебные маршруты."},
+        ],
     )
 
     Base.metadata.create_all(bind=engine)

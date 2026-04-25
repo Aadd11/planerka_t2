@@ -45,6 +45,36 @@ class UserCreate(UserBase):
             raise ValueError("Password must be at least 8 characters long")
         return value
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "full_name": "Анна Иванова",
+                "email": "anna@t2.demo",
+                "password": "password123",
+                "alliance": "Retail East",
+                "employeeCategory": "adult",
+            }
+        },
+    )
+
+
+class LoginRequest(ApiModel):
+    email: EmailStr
+    password: str
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "email": "manager@t2.demo",
+                "password": "password123",
+            }
+        },
+    )
+
 
 class UserOut(UserBase):
     id: int
@@ -88,6 +118,26 @@ class ScheduleBulkUpdate(ApiModel):
     days: dict[dt.date, ScheduleDayPayload]
     employee_comment: str | None = Field(default=None, alias="employeeComment")
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "employeeComment": "Могу работать после 12:00",
+                "days": {
+                    "2026-05-04": {
+                        "dayType": "work",
+                        "segments": [
+                            {"start": "09:00", "end": "12:00"},
+                            {"start": "13:00", "end": "18:00"},
+                        ],
+                        "employeeComment": "Удобно работать в первой половине дня",
+                    }
+                },
+            }
+        },
+    )
+
 
 class ValidationIssue(ApiModel):
     severity: IssueSeverity
@@ -112,6 +162,26 @@ class ScheduleValidateRequest(ApiModel):
     period_id: int | None = Field(default=None, alias="periodId")
     days: dict[dt.date, ScheduleDayPayload]
     employee_category: EmployeeCategory | None = Field(default=None, alias="employeeCategory")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "periodId": 1,
+                "employeeCategory": "adult",
+                "days": {
+                    "2026-05-04": {
+                        "dayType": "work",
+                        "segments": [
+                            {"start": "09:00", "end": "12:00"},
+                            {"start": "13:00", "end": "18:00"},
+                        ],
+                    }
+                },
+            }
+        },
+    )
 
 
 class SubmissionOut(ApiModel):
@@ -149,6 +219,20 @@ class CollectionPeriodCreate(ApiModel):
         if self.period_end < self.period_start:
             raise ValueError("periodEnd must be greater than or equal to periodStart")
         return self
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "name": "Май 2026",
+                "alliance": "Retail East",
+                "periodStart": "2026-05-01",
+                "periodEnd": "2026-05-14",
+                "deadline": "2026-04-30T18:00:00Z",
+            }
+        },
+    )
 
 
 class ScheduleTemplateCreate(ApiModel):
@@ -190,6 +274,19 @@ class ManagerCommentCreate(ApiModel):
     period_id: int = Field(alias="periodId")
     date: dt.date | None = None
     comment: str
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "userId": 12,
+                "periodId": 3,
+                "date": "2026-05-04",
+                "comment": "Принято, оставим утреннее покрытие.",
+            }
+        },
+    )
 
 
 class ManagerCommentsOut(ApiModel):

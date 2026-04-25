@@ -21,7 +21,11 @@ def period_to_schema(period: CollectionPeriod) -> CollectionPeriodOut:
     return data
 
 
-@router.get("/current", response_model=CollectionPeriodOut | None)
+@router.get(
+    "/current",
+    response_model=CollectionPeriodOut | None,
+    summary="Активный период текущей группы",
+)
 def get_current_period(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -43,7 +47,12 @@ def get_current_period(
     return period_to_schema(period)
 
 
-@router.post("", response_model=CollectionPeriodOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=CollectionPeriodOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать период сбора",
+)
 def create_period(
     payload: CollectionPeriodCreate,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
@@ -72,7 +81,11 @@ def create_period(
     return period_to_schema(period)
 
 
-@router.post("/{period_id}/close", response_model=CollectionPeriodOut)
+@router.post(
+    "/{period_id}/close",
+    response_model=CollectionPeriodOut,
+    summary="Закрыть период",
+)
 def close_period(
     period_id: int,
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
@@ -91,7 +104,7 @@ def close_period(
     return period_to_schema(period)
 
 
-@router.get("/current/stats")
+@router.get("/current/stats", summary="Статистика по активному периоду")
 def get_current_period_stats(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),
@@ -135,7 +148,7 @@ def get_current_period_stats(
     }
 
 
-@router.get("/current/submissions")
+@router.get("/current/submissions", summary="Список submitted/pending по активному периоду")
 def get_current_period_submissions(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),
@@ -184,7 +197,7 @@ def get_current_period_submissions(
     return {"submitted": submitted, "pending": pending}
 
 
-@router.get("/history", response_model=list[CollectionPeriodOut])
+@router.get("/history", response_model=list[CollectionPeriodOut], summary="История периодов")
 def get_periods_history(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),

@@ -45,7 +45,11 @@ def _manager_users(db: Session, manager: User) -> list[User]:
     )
 
 
-@router.get("/schedules", response_model=ManagerSchedulesOut)
+@router.get(
+    "/schedules",
+    response_model=ManagerSchedulesOut,
+    summary="Матрица графиков по группе",
+)
 def get_manager_schedules(
     period_id: int | None = Query(default=None, alias="period_id"),
     current_user: User = Depends(require_role(UserRole.MANAGER, UserRole.ADMIN)),
@@ -86,7 +90,11 @@ def get_manager_schedules(
     return ManagerSchedulesOut(period=period_to_schema(period), items=items)
 
 
-@router.get("/comments", response_model=ManagerCommentsOut)
+@router.get(
+    "/comments",
+    response_model=ManagerCommentsOut,
+    summary="Получить комментарии руководителя",
+)
 def get_manager_comments(
     user_id: int,
     period_id: int,
@@ -117,7 +125,12 @@ def get_manager_comments(
     )
 
 
-@router.post("/comments", response_model=ManagerCommentsOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/comments",
+    response_model=ManagerCommentsOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Оставить комментарий руководителя",
+)
 def create_manager_comment(
     payload: ManagerCommentCreate,
     current_user: User = Depends(require_role(UserRole.MANAGER, UserRole.ADMIN)),
@@ -170,7 +183,11 @@ def create_manager_comment(
     return get_manager_comments(payload.user_id, period.id, current_user, db)
 
 
-@router.get("/coverage", response_model=CoverageResponse)
+@router.get(
+    "/coverage",
+    response_model=CoverageResponse,
+    summary="Coverage по выбранному дню",
+)
 def get_manager_coverage(
     day: date,
     period_id: int | None = Query(default=None, alias="period_id"),

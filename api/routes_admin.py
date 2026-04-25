@@ -17,7 +17,7 @@ def require_admin(current_user: User = Depends(require_role(UserRole.ADMIN))) ->
     return current_user
 
 
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=list[UserOut], summary="Список пользователей")
 def get_users(
     verified: bool | None = None,
     alliance: str | None = None,
@@ -42,7 +42,7 @@ def get_users(
     return query.order_by(User.full_name.asc()).all()
 
 
-@router.put("/users/{user_id}/verify", response_model=UserOut)
+@router.put("/users/{user_id}/verify", response_model=UserOut, summary="Подтвердить пользователя")
 def verify_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -57,7 +57,7 @@ def verify_user(
     return user
 
 
-@router.put("/users/{user_id}/role", response_model=UserOut)
+@router.put("/users/{user_id}/role", response_model=UserOut, summary="Изменить роль пользователя")
 def change_role(
     user_id: int,
     payload: AdminRoleUpdate,
@@ -73,7 +73,7 @@ def change_role(
     return user
 
 
-@router.put("/users/{user_id}/alliance", response_model=UserOut)
+@router.put("/users/{user_id}/alliance", response_model=UserOut, summary="Изменить группу пользователя")
 def change_alliance(
     user_id: int,
     payload: AdminAllianceUpdate,
