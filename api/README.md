@@ -1,8 +1,8 @@
 # T2 Schedule Planner API
 
 ## Описание
-Это текущая backend-версия API для T2 Schedule Planner. Сервис отвечает за:
-- регистрацию и логин пользователей;
+
+- регистрация и логин пользователей;
 - подтверждение пользователей;
 - периоды сбора графиков по группам;
 - сохранение и отправку расписаний;
@@ -113,15 +113,28 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 - храните `JWT_SECRET_KEY` вне репозитория.
 
 ## Docker
-Для полной сборки проекта из корня репозитория:
+Текущая compose-конфигурация backend-only и поднимает:
+- `postgres`
+- `backend`
+
+Запуск из корня репозитория:
 
 ```bash
 cd ~/development/planerka_t2
 cp .env.example .env
-docker compose up --build
+docker compose up --build -d
 ```
 
 Backend будет доступен на `http://localhost:8000`.
+Swagger: `http://localhost:8000/docs`
+
+Проверенный smoke flow:
+
+```bash
+docker compose exec backend python seed_demo.py
+```
+
+После этого можно логиниться demo-аккаунтами и открывать Swagger.
 
 ## Demo seed
 После запуска backend:
