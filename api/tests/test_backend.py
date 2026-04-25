@@ -8,10 +8,11 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app import app
 from auth import verify_password
+from config import Settings
 from constants import UserRole
-from models import ScheduleEntry, User
+from models import ScheduleEntry, User, VerificationToken
 from routes_admin import get_users
-from routes_auth import login, register_user
+from routes_auth import hash_verification_token, login, register_user
 from routes_export import export_schedule
 from routes_manager import create_manager_comment
 from routes_schedule import get_my_schedule, get_schedule_for_user, update_my_schedule
@@ -47,6 +48,32 @@ def test_register_and_login(db_session):
 
     token = asyncio.run(login(JsonLoginRequest(), db_session))
     assert token.access_token
+
+
+def test_register_stores_hashed_verification_token(db_session):
+    payload = UserCreate(
+        full_name="Ivan Ivanov",
+        email="ivan.hash@example.com",
+        password="password123",
+        alliance="Retail East",
+        employeeCategory="adult",
+    )
+    user = register_user(payload, db_session)
+    token_row = db_session.query(VerificationToken).filter(VerificationToken.user_id == user.id).first()
+    assert token_row is not None
+    assert len(token_row.token) == 64
+    assert all(char in "0123456789abcdef" for char in token_row.token)
+
+
+def test_settings_require_strong_jwt_secret_in_production():
+    settings = Settings(
+        DATABASE_URL="sqlite:////tmp/t2_security_test.db",
+        JWT_SECRET_KEY="CHANGE_ME_SECRET",
+        APP_ENV="production",
+        CORS_ORIGINS="http://localhost:8000",
+    )
+    with pytest.raises(ValueError):
+        settings.validate_security()
 
 
 def test_employee_sees_only_own_schedule(db_session):

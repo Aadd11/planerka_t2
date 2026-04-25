@@ -31,7 +31,7 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       CORS_ORIGINS: ${CORS_ORIGINS}
       EXPORT_DIR: ${EXPORT_DIR}
-      APP_ENV: docker
+      APP_ENV: ${APP_ENV:-production}
     ports:
       - "8000:8000"
     volumes:

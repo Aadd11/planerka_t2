@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,6 +15,10 @@ from schedule_service import get_weekly_norm_hours
 from schemas import LoginRequest, Token, UserCreate, UserMe, VerificationRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def hash_verification_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 @router.post(
@@ -45,7 +50,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
 
     verification_token = VerificationToken(
         user_id=user.id,
-        token=secrets.token_urlsafe(32),
+        token=hash_verification_token(secrets.token_urlsafe(32)),
         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
     )
     db.add(verification_token)
@@ -105,7 +110,10 @@ async def _extract_login_credentials(request: Request) -> tuple[str, str]:
 def verify_account(payload: VerificationRequest, db: Session = Depends(get_db)):
     token = (
         db.query(VerificationToken)
-        .filter(VerificationToken.token == payload.token, VerificationToken.consumed.is_(False))
+        .filter(
+            VerificationToken.token == hash_verification_token(payload.token),
+            VerificationToken.consumed.is_(False),
+        )
         .first()
     )
     if not token:
