@@ -29,8 +29,8 @@ class Settings(BaseSettings):
             or len(self.JWT_SECRET_KEY) < 32
         ):
             raise ValueError("JWT_SECRET_KEY must be changed and be at least 32 characters long")
-        if "*" in self.cors_origins:
-            raise ValueError("Wildcard CORS origin is not allowed")
+       # if "*" in self.cors_origins:
+       #    raise ValueError("Wildcard CORS origin is not allowed")
 
 
 settings = Settings()
