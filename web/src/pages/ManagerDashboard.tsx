@@ -269,10 +269,12 @@ function DashboardPage({
   onReview: (userId: number) => void;
 }) {
   return (
-    <div className="manager-grid">
-      <StatCard label="Всего сотрудников" value={stats?.totalEmployees ?? usersCount} />
-      <StatCard label="Сдано графиков" value={stats?.submittedCount ?? rows.length - pending} tone="green" />
-      <StatCard label="На проверке" value={stats?.pendingCount ?? pending} tone="pink" />
+    <div className="dashboard-stack">
+      <div className="metrics-row metrics-row--three">
+        <StatCard compact label="Всего сотрудников" value={stats?.totalEmployees ?? usersCount} />
+        <StatCard compact label="Сдано графиков" value={stats?.submittedCount ?? rows.length - pending} tone="green" />
+        <StatCard compact label="На проверке" value={stats?.pendingCount ?? pending} tone="pink" />
+      </div>
 
       <section className="panel manager-table-card">
         <div className="panel__head">
@@ -638,9 +640,11 @@ function ExportPage({
   const list = periods.length ? periods : activePeriod ? [activePeriod] : [];
 
   return (
-    <div className="admin-grid export-grid">
-      <StatCard label="Сдано" value={stats?.submittedCount ?? submissions?.submitted.length ?? 0} tone="green" />
-      <StatCard label="Ожидает" value={stats?.pendingCount ?? submissions?.pending.length ?? 0} tone="pink" />
+    <div className="export-stack">
+      <div className="metrics-row metrics-row--two">
+        <StatCard compact label="Сдано" value={stats?.submittedCount ?? submissions?.submitted.length ?? 0} tone="green" />
+        <StatCard compact label="Ожидает" value={stats?.pendingCount ?? submissions?.pending.length ?? 0} tone="pink" />
+      </div>
       <section className="panel admin-wide">
         <div className="panel__head">
           <div>

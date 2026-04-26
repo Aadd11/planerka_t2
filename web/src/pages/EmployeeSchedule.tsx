@@ -10,6 +10,7 @@ export function EmployeeSchedule() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasActivePeriod, setHasActivePeriod] = useState(true);
 
   useEffect(() => {
     void load();
@@ -19,12 +20,29 @@ export function EmployeeSchedule() {
     setLoading(true);
     setError(null);
     try {
+      const currentPeriod = await api.currentPeriod();
+      if (!currentPeriod) {
+        setBundle(null);
+        setDays({});
+        setComment("");
+        setHasActivePeriod(false);
+        return;
+      }
+
+      setHasActivePeriod(true);
       const data = await api.getMySchedule();
       setBundle(data);
       setDays(data.entries);
       setComment(data.submission.employeeComment ?? "");
     } catch (err) {
-      setError(apiErrorMessage(err));
+      if (err instanceof Error && apiErrorMessage(err).includes("Период не найден")) {
+        setBundle(null);
+        setDays({});
+        setComment("");
+        setHasActivePeriod(false);
+      } else {
+        setError(apiErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -68,7 +86,18 @@ export function EmployeeSchedule() {
   const issuesByDate = useMemo(() => issueMap(bundle?.validation.issues ?? []), [bundle]);
 
   if (loading) return <EmptyState title="Загружаем график" text="Получаем активный период и валидацию." />;
-  if (!bundle) return <ErrorBanner message={error ?? "Активный график не найден"} />;
+  if (!bundle) {
+    if (error) return <ErrorBanner message={error} />;
+    if (!hasActivePeriod) {
+      return (
+        <EmptyState
+          title="Нет активного периода"
+          text="Для вашей группы сейчас не открыт период сбора. Профиль доступен, а график появится после открытия периода."
+        />
+      );
+    }
+    return <ErrorBanner message="Активный график не найден" />;
+  }
 
   const total = bundle.validation.summary.totalHours;
   const norm = bundle.user.weeklyNormHours ?? 40;

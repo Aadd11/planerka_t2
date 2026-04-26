@@ -4,15 +4,17 @@ export function StatCard({
   label,
   value,
   tone = "dark",
+  compact = false,
   children,
 }: {
   label: string;
   value: ReactNode;
   tone?: "dark" | "green" | "pink";
+  compact?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <article className={`stat-card stat-card--${tone}`}>
+    <article className={`stat-card stat-card--${tone}${compact ? " stat-card--compact" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       {children}
