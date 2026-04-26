@@ -2,34 +2,54 @@
 
 ## Описание
 
-- регистрация и логин пользователей;
-- подтверждение пользователей;
+Backend API для сервиса планирования графиков сотрудников. Система покрывает:
+
+- регистрацию, вход и подтверждение пользователей;
 - периоды сбора графиков по группам;
-- сохранение и отправку расписаний;
-- backend-валидацию норм рабочего времени;
-- комментарии руководителя;
-- почасовое покрытие;
-- экспорт в Excel;
-- демонстрационные данные.
+- сохранение, отправку и проверку расписаний;
+- комментарии руководителя и контроль статусов отправки;
+- почасовое покрытие по группе;
+- экспорт расписаний в Excel;
+- демонстрационные данные для показа и тестирования.
 
 ## Возможности текущей версии
+
 - роли: `employee`, `manager`, `admin`;
 - привязка данных к группе через поле `alliance` в модели и термин “Группа” в продуктовой логике;
 - мультиинтервальные рабочие дни;
 - комментарии на день и на весь график;
-- draft/submitted через `schedule_submissions`;
+- статусы `draft` и `submitted` через `schedule_submissions`;
 - правила валидации для `adult`, `minor_student`, `minor_not_student`;
-- контроль доступа руководителя только в рамках своей группы.
+- контроль доступа руководителя только в рамках своей группы;
+- health endpoint'ы `/health`, `/live`, `/ready`;
+- stateless Excel-экспорт без записи временных файлов в контейнер;
+- миграции через Alembic и отдельный migration job для production.
 
-## Стек
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Alembic
-- openpyxl
-- pytest
+## Технический стек
+
+- `FastAPI` — REST API, OpenAPI/Swagger, dependency injection;
+- `SQLAlchemy` — ORM и работа с транзакциями;
+- `PostgreSQL` — основная production-база данных;
+- `Alembic` — миграции схемы и bootstrap базы;
+- `Pydantic` — схемы запросов/ответов и валидация данных;
+- `python-jose` + JWT — аутентификация и роли;
+- `bcrypt/passlib` — хеширование паролей;
+- `openpyxl` — экспорт графиков в Excel;
+- `pytest` + `httpx`/`TestClient` — HTTP-уровневые backend-тесты;
+- `Docker` + `Docker Compose` — локальный запуск и production-конфигурации;
+- `Nginx` — reverse proxy для production-стека.
+
+## Ключевые особенности проекта
+
+- Ролевая модель: сотрудник, руководитель, администратор.
+- Валидация графиков вынесена в backend и не зависит от frontend-логики.
+- Поддерживаются несколько рабочих интервалов в пределах одного дня.
+- Данные и доступы изолированы по группам.
+- Есть demo-ready сценарий с seed-данными и Swagger UI.
+- Подготовлен production-путь с миграциями, readiness/liveness и запуском нескольких API-реплик за proxy.
 
 ## Структура
+
 - [app.py](./app.py) — сборка FastAPI приложения и метаданные OpenAPI.
 - [routes_auth.py](./routes_auth.py) — endpoint'ы аутентификации.
 - [routes_schedule.py](./routes_schedule.py) — графики и валидация.
@@ -37,20 +57,18 @@
 - [routes_periods.py](./routes_periods.py) — периоды и статистика.
 - [routes_admin.py](./routes_admin.py) — управление пользователями.
 - [routes_export.py](./routes_export.py) — экспорт в Excel.
+- [routes_templates.py](./routes_templates.py) — шаблоны графиков пользователя.
 - [schedule_service.py](./schedule_service.py) — нормализация и логика валидации.
 - [seed_demo.py](./seed_demo.py) — генерация демонстрационных данных.
+- [alembic](./alembic) — миграции базы данных.
 - [tests/test_backend.py](./tests/test_backend.py) — backend-тесты.
 
 ## OpenAPI / Swagger
+
 После запуска backend доступны:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 - схема OpenAPI: `http://localhost:8000/openapi.json`
-
-В Swagger уже добавлены:
-- summaries и descriptions для ключевых маршрутов;
-- примеры payload для register, login, validate, period create и manager comment;
-- группировка endpoint'ов по тегам.
 
 ### Важный момент по входу
 `POST /auth/login` принимает оба формата:
@@ -74,6 +92,7 @@ password=password123
 Это сделано специально, чтобы вход работал и из Swagger/UI-клиентов, и из обычных frontend/backend клиентов без 400/422 из-за несовпадения формата.
 
 ## Локальный запуск
+
 1. Создайте и активируйте виртуальное окружение.
 2. Установите зависимости:
 
@@ -89,32 +108,18 @@ password=password123
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## Инструкция по деплою
-Минимальный production-подобный сценарий для backend:
+## Деплой
 
-1. Подготовьте PostgreSQL и создайте базу.
-2. Выставьте env:
-   `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CORS_ORIGINS`.
-3. Примените миграции:
+Подробная production-инструкция вынесена в отдельный файл:
 
-```bash
-alembic upgrade head
-```
-
-4. Запустите сервис через uvicorn/gunicorn:
-
-```bash
-uvicorn app:app --host 0.0.0.0 --port 8000
-```
-
-5. За reverse proxy:
-- проксируйте `/docs`, `/redoc`, `/openapi.json` только если это допустимо для среды;
-- ограничьте `CORS_ORIGINS`;
-- храните `JWT_SECRET_KEY` вне репозитория.
+- [DEPLOY.md](./DEPLOY.md)
 
 ## Docker
-Текущая compose-конфигурация поднимает только backend-часть:
+
+По умолчанию корневой `docker-compose.yml` поднимает локальный dev-стек:
+
 - `postgres`
+- `migrate`
 - `backend`
 
 Запуск из корня репозитория:
@@ -136,7 +141,13 @@ docker compose exec backend python seed_demo.py
 
 После этого можно логиниться demo-аккаунтами и открывать Swagger.
 
+Для production используются отдельные файлы:
+
+- `docker-compose.prod.yml`
+- `deploy/nginx.prod.conf`
+
 ## Демонстрационные данные
+
 После запуска backend:
 
 ```bash
@@ -157,29 +168,30 @@ docker compose exec backend python seed_demo.py
 - `newbie@t2.demo / password123`
 
 ## Тесты
+
 Запуск:
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_backend.py
 ```
 
-Что покрыто:
-- регистрация и логин;
-- employee access control;
-- manager group isolation;
-- manager comments;
-- запрет сотруднику менять manager comment;
-- валидация графика;
-- adult warning;
-- minor weekly error;
-- minor night work error;
-- export.
+Или через Docker:
+
+```bash
+docker compose exec backend python -m pytest tests/test_backend.py
+```
+
+Сейчас проверяется HTTP-уровень основных API-сценариев, включая auth, периоды, графики, manager/admin access и export.
 
 ## Основные endpoint'ы
+
 - `POST /auth/register`
 - `POST /auth/login`
 - `POST /auth/verify`
 - `GET /auth/me`
+- `GET /health`
+- `GET /live`
+- `GET /ready`
 - `GET /periods/current`
 - `POST /periods`
 - `POST /periods/{period_id}/close`
