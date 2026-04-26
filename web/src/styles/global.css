@@ -367,14 +367,8 @@ h2,
   gap: var(--gap);
 }
 
-.manager-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
 .manager-table-card {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .stat-card {
@@ -382,6 +376,23 @@ h2,
   position: relative;
   overflow: hidden;
   border-radius: 18px;
+}
+
+.stat-card--compact {
+  min-height: 72px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.stat-card--compact strong {
+  font-size: 52px;
+  line-height: 0.78;
+  margin-top: -4px;
+  margin-bottom: -4px;
 }
 
 .stat-card span {
@@ -698,6 +709,28 @@ td small {
   align-items: stretch;
 }
 
+.dashboard-stack,
+.export-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.metrics-row {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.metrics-row--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metrics-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .periods-grid {
   display: flex;
   align-items: stretch;
@@ -796,11 +829,6 @@ td small {
   min-width: 220px;
   padding-inline: 24px;
   margin-top: 6px;
-}
-
-.export-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
 }
 
 .inline-edit {
