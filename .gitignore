@@ -1,5 +1,7 @@
 .idea/
 .env
 .codex
+web/node_modules/
+web/dist/
 /presentation.md
 /api/.codex
