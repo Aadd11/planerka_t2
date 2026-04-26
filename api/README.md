@@ -8,18 +8,18 @@
 - сохранение и отправку расписаний;
 - backend-валидацию норм рабочего времени;
 - комментарии руководителя;
-- coverage по часам;
+- почасовое покрытие;
 - экспорт в Excel;
-- demo seed.
+- демонстрационные данные.
 
 ## Возможности текущей версии
 - роли: `employee`, `manager`, `admin`;
 - привязка данных к группе через поле `alliance` в модели и термин “Группа” в продуктовой логике;
 - мультиинтервальные рабочие дни;
-- comments на день и на весь график;
+- комментарии на день и на весь график;
 - draft/submitted через `schedule_submissions`;
-- validation rules для `adult`, `minor_student`, `minor_not_student`;
-- manager access control только в рамках своей группы.
+- правила валидации для `adult`, `minor_student`, `minor_not_student`;
+- контроль доступа руководителя только в рамках своей группы.
 
 ## Стек
 - FastAPI
@@ -30,29 +30,29 @@
 - pytest
 
 ## Структура
-- [app.py](./app.py) — сборка FastAPI приложения и OpenAPI metadata.
-- [routes_auth.py](./routes_auth.py) — auth endpoints.
-- [routes_schedule.py](./routes_schedule.py) — графики и validation.
-- [routes_manager.py](./routes_manager.py) — manager endpoints.
+- [app.py](./app.py) — сборка FastAPI приложения и метаданные OpenAPI.
+- [routes_auth.py](./routes_auth.py) — endpoint'ы аутентификации.
+- [routes_schedule.py](./routes_schedule.py) — графики и валидация.
+- [routes_manager.py](./routes_manager.py) — endpoint'ы руководителя.
 - [routes_periods.py](./routes_periods.py) — периоды и статистика.
 - [routes_admin.py](./routes_admin.py) — управление пользователями.
-- [routes_export.py](./routes_export.py) — Excel export.
-- [schedule_service.py](./schedule_service.py) — нормализация и validation logic.
-- [seed_demo.py](./seed_demo.py) — demo seed.
-- [tests/test_backend.py](./tests/test_backend.py) — backend tests.
+- [routes_export.py](./routes_export.py) — экспорт в Excel.
+- [schedule_service.py](./schedule_service.py) — нормализация и логика валидации.
+- [seed_demo.py](./seed_demo.py) — генерация демонстрационных данных.
+- [tests/test_backend.py](./tests/test_backend.py) — backend-тесты.
 
 ## OpenAPI / Swagger
 После запуска backend доступны:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-- OpenAPI schema: `http://localhost:8000/openapi.json`
+- схема OpenAPI: `http://localhost:8000/openapi.json`
 
 В Swagger уже добавлены:
 - summaries и descriptions для ключевых маршрутов;
 - примеры payload для register, login, validate, period create и manager comment;
 - группировка endpoint'ов по тегам.
 
-### Важный момент по login
+### Важный момент по входу
 `POST /auth/login` принимает оба формата:
 
 1. `application/json`
@@ -71,7 +71,7 @@ username=manager@t2.demo
 password=password123
 ```
 
-Это сделано специально, чтобы login работал и из Swagger/UI-клиентов, и из обычных frontend/backend клиентов без 400/422 из-за несовпадения формата.
+Это сделано специально, чтобы вход работал и из Swagger/UI-клиентов, и из обычных frontend/backend клиентов без 400/422 из-за несовпадения формата.
 
 ## Локальный запуск
 1. Создайте и активируйте виртуальное окружение.
@@ -89,8 +89,8 @@ password=password123
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## Deployment instructions
-Минимальный production-like сценарий для backend:
+## Инструкция по деплою
+Минимальный production-подобный сценарий для backend:
 
 1. Подготовьте PostgreSQL и создайте базу.
 2. Выставьте env:
@@ -113,7 +113,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 - храните `JWT_SECRET_KEY` вне репозитория.
 
 ## Docker
-Текущая compose-конфигурация backend-only и поднимает:
+Текущая compose-конфигурация поднимает только backend-часть:
 - `postgres`
 - `backend`
 
@@ -128,7 +128,7 @@ docker compose up --build -d
 Backend будет доступен на `http://localhost:8000`.
 Swagger: `http://localhost:8000/docs`
 
-Проверенный smoke flow:
+Проверенный smoke-сценарий:
 
 ```bash
 docker compose exec backend python seed_demo.py
@@ -136,7 +136,7 @@ docker compose exec backend python seed_demo.py
 
 После этого можно логиниться demo-аккаунтами и открывать Swagger.
 
-## Demo seed
+## Демонстрационные данные
 После запуска backend:
 
 ```bash
@@ -164,12 +164,12 @@ docker compose exec backend python seed_demo.py
 ```
 
 Что покрыто:
-- register/login;
+- регистрация и логин;
 - employee access control;
 - manager group isolation;
 - manager comments;
 - запрет сотруднику менять manager comment;
-- validate schedule;
+- валидация графика;
 - adult warning;
 - minor weekly error;
 - minor night work error;

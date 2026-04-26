@@ -1,47 +1,47 @@
-# API Documentation
+# Документация по API
 
-This document reflects the backend behavior verified on 2026-04-26.
+Этот документ описывает поведение backend API, проверенное на 2026-04-26.
 
-Base URL in local Docker setup:
+Базовый URL в локальном Docker-окружении:
 
 ```text
 http://localhost:8000
 ```
 
-## Authentication
+## Аутентификация
 
-- Protected endpoints use `Authorization: Bearer <token>`.
-- `manager` and `admin` routes also require the user to be verified.
-- `admin` bypasses role restrictions enforced by `require_role(...)`.
+- Защищённые endpoint'ы используют заголовок `Authorization: Bearer <token>`.
+- Маршруты для `manager` и `admin` требуют, чтобы пользователь был подтверждён.
+- `admin` обходит часть ролевых ограничений, реализованных через `require_role(...)`.
 
-## Roles
+## Роли
 
 - `employee`
 - `manager`
 - `admin`
 
-## Core Domain Notes
+## Основные доменные сущности
 
-- Group scoping is implemented through the `alliance` field.
-- A schedule is stored per user and per collection period.
-- Schedule day types:
+- Привязка данных к группе реализована через поле `alliance`.
+- График хранится отдельно для пользователя и периода сбора.
+- Типы дней:
   - `work`
   - `day_off`
   - `vacation`
   - `holiday`
   - `unavailable`
-- Submission statuses:
+- Статусы отправки:
   - `draft`
   - `submitted`
 
-## System
+## Системные endpoint'ы
 
 ### `GET /health`
 
-- Auth: no
-- Response: service health status and current app environment
+- Авторизация: не требуется
+- Назначение: общая проверка состояния сервиса и текущего окружения
 
-Example response:
+Пример ответа:
 
 ```json
 {
@@ -50,13 +50,24 @@ Example response:
 }
 ```
 
+### `GET /live`
+
+- Авторизация: не требуется
+- Назначение: liveness probe, проверка, что процесс приложения жив
+
+### `GET /ready`
+
+- Авторизация: не требуется
+- Назначение: readiness probe, проверка готовности приложения обслуживать запросы и доступности БД
+
 ## Auth
 
 ### `POST /auth/register`
 
-- Auth: no
-- Purpose: create a new employee account
-- Request body:
+- Авторизация: не требуется
+- Назначение: регистрация нового сотрудника
+
+Тело запроса:
 
 ```json
 {
@@ -68,24 +79,29 @@ Example response:
 }
 ```
 
-- Rules:
-  - password must be at least 8 characters
-  - password must not exceed 72 bytes
-  - duplicate email returns `400`
-- Response: created user
-- Important:
-  - new users are created with `role=employee`
-  - new users are created with `isVerified=false`
-  - a verification token row is created in the database, but the raw token is not returned by this endpoint
+Правила:
+
+- пароль должен содержать минимум 8 символов
+- пароль не должен превышать 72 байта
+- при повторяющемся email возвращается `400`
+
+Важно:
+
+- новый пользователь всегда создаётся с ролью `employee`
+- новый пользователь создаётся с `isVerified=false`
+- verification token создаётся в базе, но raw token не возвращается в ответе
 
 ### `POST /auth/login`
 
-- Auth: no
-- Purpose: obtain a bearer token
-- Accepted formats:
-  - JSON: `{ "email": "...", "password": "..." }`
-  - form data: `username` or `email`, plus `password`
-- Response:
+- Авторизация: не требуется
+- Назначение: получить bearer token
+
+Поддерживаемые форматы:
+
+- JSON: `{ "email": "...", "password": "..." }`
+- form-data: `username` или `email`, плюс `password`
+
+Пример ответа:
 
 ```json
 {
@@ -94,15 +110,17 @@ Example response:
 }
 ```
 
-- Errors:
-  - `400` for wrong credentials
-  - `400` if form payload is missing both identity and password
+Ошибки:
+
+- `400`, если логин или пароль неверны
+- `400`, если в form-data не переданы email/username и password
 
 ### `POST /auth/verify`
 
-- Auth: no
-- Purpose: confirm a user account by verification token
-- Request body:
+- Авторизация: не требуется
+- Назначение: подтверждение аккаунта по verification token
+
+Тело запроса:
 
 ```json
 {
@@ -110,35 +128,39 @@ Example response:
 }
 ```
 
-- Response: verified user object
-- Errors:
-  - `400` invalid token
-  - `400` expired token
-- Important:
-  - token storage is hashed in the database
-  - the raw token must come from an out-of-band source because `/auth/register` does not return it
+Ошибки:
+
+- `400`, если token неверный
+- `400`, если token истёк
+
+Важно:
+
+- token хранится в базе в хешированном виде
+- raw token должен приходить из внешнего канала, потому что `/auth/register` его не возвращает
 
 ### `GET /auth/me`
 
-- Auth: bearer token
-- Purpose: return current authenticated user
-- Response: current user profile
+- Авторизация: требуется bearer token
+- Назначение: вернуть профиль текущего пользователя
 
 ## Periods
 
 ### `GET /periods/current`
 
-- Auth: authenticated active user
-- Purpose: return the current open period for the user’s `alliance`
-- Response:
-  - current period object
-  - `null` if the user has no alliance or no open period for that alliance
+- Авторизация: требуется активный пользователь
+- Назначение: вернуть текущий открытый период для группы пользователя
+
+Ответ:
+
+- объект периода
+- `null`, если у пользователя не задана группа или для группы нет открытого периода
 
 ### `POST /periods`
 
-- Auth: verified `manager` or `admin`
-- Purpose: create a new collection period
-- Request body:
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: создать новый период сбора
+
+Тело запроса:
 
 ```json
 {
@@ -150,27 +172,28 @@ Example response:
 }
 ```
 
-- Rules:
-  - `manager` may only create a period for their own `alliance`
-  - if `alliance` is omitted, the current user’s `alliance` is used
-  - creating a new open period closes previous open periods for the same alliance
-- Response: created period with computed `holidays`
+Правила:
+
+- `manager` может создавать период только для своей группы
+- если `alliance` не передан, используется группа текущего пользователя
+- при создании нового открытого периода старые открытые периоды этой же группы закрываются
 
 ### `POST /periods/{period_id}/close`
 
-- Auth: verified `manager` or `admin`
-- Purpose: close a period
-- Rules:
-  - `manager` may close only periods of their own `alliance`
-- Errors:
-  - `404` period not found
-  - `403` manager has no access to that period
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: закрыть период
+
+Ошибки:
+
+- `404`, если период не найден
+- `403`, если manager пытается закрыть период другой группы
 
 ### `GET /periods/current/stats`
 
-- Auth: verified `manager` or `admin`
-- Purpose: statistics for the current open period of the current user’s `alliance`
-- Response:
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: вернуть статистику по текущему открытому периоду
+
+Пример ответа:
 
 ```json
 {
@@ -180,15 +203,17 @@ Example response:
 }
 ```
 
-- Notes:
-  - counts only verified employees
-  - if there is no open period, all counters are zero
+Особенности:
+
+- считаются только подтверждённые сотрудники
+- если открытого периода нет, все счётчики равны нулю
 
 ### `GET /periods/current/submissions`
 
-- Auth: verified `manager` or `admin`
-- Purpose: split employees into `submitted` and `pending` for the current open period
-- Response shape:
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: разделить сотрудников на `submitted` и `pending` в текущем периоде
+
+Форма ответа:
 
 ```json
 {
@@ -197,44 +222,51 @@ Example response:
 }
 ```
 
-- Notes:
-  - employees without a submission row are treated as `draft`
-  - pending list includes non-submitted employees
+Особенности:
+
+- если у сотрудника нет строки submission, он считается как `draft`
+- `pending` включает всех, кто ещё не отправил график
 
 ### `GET /periods/history`
 
-- Auth: verified `manager` or `admin`
-- Purpose: list past and current periods
-- Scope:
-  - `admin` sees all periods
-  - `manager` sees only periods of their own `alliance`
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: история прошлых и текущих периодов
+
+Права доступа:
+
+- `admin` видит все периоды
+- `manager` видит только периоды своей группы
 
 ## Schedules
 
 ### `GET /schedules/me`
 
-- Auth: verified user
-- Query:
-  - optional `period_id`
-- Purpose: return the current user’s schedule bundle
-- Response includes:
-  - `user`
-  - `period`
-  - `submission`
-  - `entries`
-  - `validation`
+- Авторизация: подтверждённый пользователь
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: вернуть bundle текущего графика пользователя
 
-- Notes:
-  - if `period_id` is omitted, only an open period is accepted
-  - a draft submission row is auto-created if missing
+Ответ включает:
+
+- `user`
+- `period`
+- `submission`
+- `entries`
+- `validation`
+
+Особенности:
+
+- если `period_id` не передан, используется только открытый период
+- если submission ещё не существует, backend создаёт черновик автоматически
 
 ### `PUT /schedules/me`
 
-- Auth: verified user
-- Query:
-  - optional `period_id`
-- Purpose: save schedule as draft
-- Request body:
+- Авторизация: подтверждённый пользователь
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: сохранить график как черновик
+
+Тело запроса:
 
 ```json
 {
@@ -254,23 +286,25 @@ Example response:
 }
 ```
 
-- Behavior:
-  - existing entries for the user and period are replaced
-  - submission status is reset to `draft`
-  - existing manager day comments are preserved
-  - user cannot overwrite manager day comments through this endpoint
+Поведение:
+
+- существующие записи за период заменяются новыми
+- статус submission сбрасывается в `draft`
+- manager comments по тем же датам сохраняются
+- пользователь не может напрямую перезаписать комментарий руководителя
 
 ### `POST /schedules/me/submit`
 
-- Auth: verified user
-- Query:
-  - optional `period_id`
-- Purpose: submit the schedule after backend validation
-- Success response: same bundle shape as `GET /schedules/me`
-- Errors:
-  - `400` if validation contains errors
+- Авторизация: подтверждённый пользователь
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: отправить график после backend-валидации
 
-Error shape:
+Ошибки:
+
+- `400`, если валидация содержит ошибки
+
+Форма ошибки:
 
 ```json
 {
@@ -291,9 +325,10 @@ Error shape:
 
 ### `POST /schedules/validate`
 
-- Auth: verified user
-- Purpose: validate a candidate schedule without saving it
-- Request body:
+- Авторизация: подтверждённый пользователь
+- Назначение: проверить график без сохранения
+
+Тело запроса:
 
 ```json
 {
@@ -311,56 +346,60 @@ Error shape:
 }
 ```
 
-- Validation covers:
-  - date inside period
-  - valid time format
-  - start earlier than end
-  - no overlapping segments
-  - work day must have segments
-  - non-work day must not have segments
-  - weekly norms
-  - daily norms for minors
-  - night work restrictions for minors
-  - minimum days off
-  - empty schedule detection
+Что проверяется:
+
+- попадание даты в период
+- формат времени
+- начало раньше конца
+- отсутствие пересечения интервалов
+- наличие интервалов у рабочего дня
+- отсутствие интервалов у нерабочего дня
+- недельные нормы
+- дневные нормы для несовершеннолетних
+- запрет ночной работы для несовершеннолетних
+- минимум выходных дней
+- пустой график
 
 ### `GET /schedules/by-user/{user_id}`
 
-- Auth: verified `manager` or `admin`
-- Query:
-  - optional `period_id`
-- Purpose: return another user’s schedule bundle
-- Rules:
-  - `manager` may access only employees from the same `alliance`
-  - `admin` may access any user
-- Errors:
-  - `404` user not found
-  - `403` cross-group access denied
+- Авторизация: подтверждённый `manager` или `admin`
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: получить bundle графика другого сотрудника
+
+Ошибки:
+
+- `404`, если пользователь не найден
+- `403`, если manager пытается открыть график другой группы
 
 ## Manager
 
 ### `GET /manager/schedules`
 
-- Auth: verified `manager` or `admin`
-- Query:
-  - optional `period_id`
-- Purpose: return the schedule matrix for a period
-- Response:
-  - `period`
-  - `items[]`, each item containing `user`, `submission`, `entries`, `validation`
+- Авторизация: подтверждённый `manager` или `admin`
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: матрица графиков по периоду
 
-- Scope:
-  - `manager` sees verified employees from their own `alliance`
-  - `admin` sees verified employees only for the selected period’s `alliance`
+Ответ:
+
+- `period`
+- `items[]`, где каждый элемент содержит `user`, `submission`, `entries`, `validation`
+
+Права доступа:
+
+- `manager` видит подтверждённых сотрудников своей группы
+- `admin` видит подтверждённых сотрудников группы выбранного периода
 
 ### `GET /manager/comments`
 
-- Auth: verified `manager` or `admin`
-- Query:
+- Авторизация: подтверждённый `manager` или `admin`
+- Параметры query:
   - `user_id`
   - `period_id`
-- Purpose: return manager schedule-level and day-level comments for one employee
-- Response:
+- Назначение: вернуть комментарии руководителя по графику и по дням
+
+Пример ответа:
 
 ```json
 {
@@ -375,9 +414,10 @@ Error shape:
 
 ### `POST /manager/comments`
 
-- Auth: verified `manager` or `admin`
-- Purpose: create or update a manager comment
-- Request body for schedule-level comment:
+- Авторизация: подтверждённый `manager` или `admin`
+- Назначение: создать или обновить комментарий руководителя
+
+Тело для комментария ко всему графику:
 
 ```json
 {
@@ -387,7 +427,7 @@ Error shape:
 }
 ```
 
-- Request body for day-level comment:
+Тело для комментария к конкретному дню:
 
 ```json
 {
@@ -398,23 +438,26 @@ Error shape:
 }
 ```
 
-- Notes:
-  - if a day entry does not exist, the endpoint creates one with `dayType=unavailable`
-  - day comment date must be inside the period
+Особенности:
+
+- если записи за этот день нет, backend создаст её с `dayType=unavailable`
+- дата комментария должна попадать в период
 
 ### `GET /manager/coverage`
 
-- Auth: verified `manager` or `admin`
-- Query:
+- Авторизация: подтверждённый `manager` или `admin`
+- Параметры query:
   - `day`
-  - optional `period_id`
-- Purpose: hourly coverage for a selected day
-- Response:
-  - `day`
-  - `periodId`
-  - `buckets[]` for `00:00` through `23:00`
+  - необязательный `period_id`
+- Назначение: почасовое покрытие по выбранному дню
 
-Bucket shape:
+Ответ:
+
+- `day`
+- `periodId`
+- `buckets[]` для часов от `00:00` до `23:00`
+
+Пример корзины:
 
 ```json
 {
@@ -424,36 +467,40 @@ Bucket shape:
 }
 ```
 
-- Error:
-  - `400` if the requested day is outside the selected period
+Ошибка:
+
+- `400`, если дата не попадает в выбранный период
 
 ## Admin
 
 ### `GET /admin/users`
 
-- Auth: verified `manager` or `admin`
-- Query filters:
+- Авторизация: подтверждённый `manager` или `admin`
+- Поддерживаемые фильтры:
   - `verified`
   - `alliance`
   - `role`
-- Scope:
-  - `manager` sees only users from their own `alliance`
-  - `admin` may filter by any `alliance`
-- Error:
-  - `403` if called by an ordinary employee
+
+Права доступа:
+
+- `manager` видит только пользователей своей группы
+- `admin` может фильтровать по любой группе
 
 ### `PUT /admin/users/{user_id}/verify`
 
-- Auth: verified `admin`
-- Purpose: mark a user as verified
-- Errors:
-  - `404` user not found
+- Авторизация: подтверждённый `admin`
+- Назначение: подтвердить пользователя
+
+Ошибка:
+
+- `404`, если пользователь не найден
 
 ### `PUT /admin/users/{user_id}/role`
 
-- Auth: verified `admin`
-- Purpose: change user role
-- Request body:
+- Авторизация: подтверждённый `admin`
+- Назначение: изменить роль пользователя
+
+Тело запроса:
 
 ```json
 {
@@ -461,14 +508,12 @@ Bucket shape:
 }
 ```
 
-- Errors:
-  - `404` user not found
-
 ### `PUT /admin/users/{user_id}/alliance`
 
-- Auth: verified `admin`
-- Purpose: change user group
-- Request body:
+- Авторизация: подтверждённый `admin`
+- Назначение: изменить группу пользователя
+
+Тело запроса:
 
 ```json
 {
@@ -476,45 +521,45 @@ Bucket shape:
 }
 ```
 
-- Notes:
-  - for employees, weekly norm hours are recalculated from `employee_category`
+Особенность:
+
+- для сотрудников заново рассчитывается `weeklyNormHours` на основе категории
 
 ### `DELETE /admin/users/{user_id}`
 
-- Auth: verified `admin`
-- Purpose: delete a user
-- Response: `204 No Content`
-- Errors:
-  - `404` user not found
+- Авторизация: подтверждённый `admin`
+- Назначение: удалить пользователя
+- Ответ: `204 No Content`
 
 ## Export
 
 ### `GET /export/schedule`
 
-- Auth: verified `manager` or `admin`
-- Query:
-  - optional `period_id`
-- Purpose: export schedule data to Excel
-- Response:
-  - file download
-  - MIME type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- Авторизация: подтверждённый `manager` или `admin`
+- Параметры query:
+  - необязательный `period_id`
+- Назначение: экспорт графиков в Excel
+- Ответ: скачивание файла
+- MIME type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 
-- Scope:
-  - `manager` may export only their own `alliance`
-  - `admin` may export any period
+Права доступа:
+
+- `manager` может экспортировать только свою группу
+- `admin` может экспортировать любой период
 
 ## Templates
 
 ### `GET /templates`
 
-- Auth: verified user
-- Purpose: list current user’s templates
+- Авторизация: подтверждённый пользователь
+- Назначение: список шаблонов текущего пользователя
 
 ### `POST /templates`
 
-- Auth: verified user
-- Purpose: create a reusable schedule template
-- Request body:
+- Авторизация: подтверждённый пользователь
+- Назначение: создать шаблон графика
+
+Тело запроса:
 
 ```json
 {
@@ -529,26 +574,29 @@ Bucket shape:
 }
 ```
 
-- Validation:
-  - `workDays` from 1 to 7
-  - `restDays` from 0 to 7
+Валидация:
+
+- `workDays` от 1 до 7
+- `restDays` от 0 до 7
 
 ### `DELETE /templates/{template_id}`
 
-- Auth: verified user
-- Purpose: delete one of the current user’s templates
-- Response: `204 No Content`
-- Errors:
-  - `404` template not found or does not belong to the current user
+- Авторизация: подтверждённый пользователь
+- Назначение: удалить шаблон текущего пользователя
+- Ответ: `204 No Content`
 
-## Common Error Patterns
+Ошибка:
 
-- `401` invalid or missing bearer token
-- `403` unverified user or insufficient role
-- `404` missing user, period, or template
-- `400` business rule violation or invalid workflow state
+- `404`, если шаблон не найден или принадлежит другому пользователю
 
-## Verified Docker Test Command
+## Типовые ошибки
+
+- `401` — отсутствует или неверен bearer token
+- `403` — пользователь не подтверждён или у него недостаточно прав
+- `404` — не найден пользователь, период или шаблон
+- `400` — нарушены бизнес-правила или неверное состояние процесса
+
+## Проверенная команда запуска тестов
 
 ```bash
 docker compose exec backend python -m pytest tests/test_backend.py
