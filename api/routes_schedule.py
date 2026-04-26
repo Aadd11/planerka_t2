@@ -162,7 +162,7 @@ def submit_my_schedule(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "message": "График не отправлен: есть ошибки валидации.",
-                "validation": bundle.validation.model_dump(by_alias=True),
+                "validation": bundle.validation.model_dump(by_alias=True, mode="json"),
             },
         )
 

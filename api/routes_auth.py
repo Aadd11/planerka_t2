@@ -119,7 +119,11 @@ def verify_account(payload: VerificationRequest, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=400, detail="Неверный токен верификации")
 
-    if token.expires_at < datetime.now(timezone.utc):
+    expires_at = token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Токен верификации истек")
 
     user = token.user
