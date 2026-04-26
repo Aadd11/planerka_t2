@@ -1,126 +1,268 @@
 # Deploy Guide
 
 ## Summary
-Current backend is ready for simple VPS deployment with:
-- Docker Compose
-- PostgreSQL in Docker
-- FastAPI backend in Docker
-- Swagger on `/docs`
 
-Security changes included:
-- `JWT_SECRET_KEY` is now validated for production-like environments
-- verification tokens are stored hashed
-- basic security headers are added to responses
+This branch adds a production-oriented container layout:
 
-## VPS Requirements
-- Ubuntu 22.04+ or similar Linux VPS
-- Docker
-- Docker Compose plugin
-- Domain name recommended
-- Reverse proxy recommended for HTTPS
+- dedicated `migrate` job
+- stateless `api` runtime
+- reverse proxy in front of the API
+- `/live` and `/ready` probes
+- production compose separated from local dev compose
+- support for running multiple `api` containers behind one reverse proxy
 
-## 1. Install Docker
+## Local Development
+
+Use the default compose file or the explicit dev file:
+
 ```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
+docker compose up --build -d
 ```
 
-Reconnect to the server after adding your user to the `docker` group.
+or
 
-## 2. Upload Project
+```bash
+docker compose -f docker-compose.dev.yml up --build -d
+```
+
+## Production Deployment
+
+Production compose expects an external PostgreSQL instance and an immutable app image.
+
+### 0. Assumptions
+
+- repository path on server: `~/planerka_t2`
+- Docker and Compose plugin are already installed
+- PostgreSQL is reachable from containers
+- your image is already built and published, or you use a locally available tag
+
+### 1. Clone repository
+
 ```bash
 git clone <your-repo-url> ~/planerka_t2
 cd ~/planerka_t2
+git checkout dev_aadd_prod
 ```
 
-## 3. Prepare Environment
+### 2. Prepare production env file
+
+Create `.env.prod` in repo root:
+
 ```bash
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
-- `JWT_SECRET_KEY` to a long random value, at least 32 characters
-- `APP_ENV=production`
-- `CORS_ORIGINS` to your real frontend or allowed origins
-
-Example:
-```env
-POSTGRES_DB=t2_schedule
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=strong-db-password
-DATABASE_URL=postgresql+psycopg://postgres:strong-db-password@postgres:5432/t2_schedule
+cat > .env.prod <<'EOF'
+DATABASE_URL=postgresql+psycopg://user:password@db-host:5432/t2_schedule
 JWT_SECRET_KEY=replace_with_a_long_random_secret_at_least_32_chars
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 CORS_ORIGINS=https://api.example.com,https://app.example.com
-EXPORT_DIR=/tmp
 APP_ENV=production
+LOG_LEVEL=info
+WEB_CONCURRENCY=2
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+DB_POOL_TIMEOUT=30
+DB_POOL_RECYCLE=1800
+API_IMAGE=registry.example.com/planerka_t2/api:2026-04-26
+EOF
 ```
 
-## 4. Start Services
+### Required env
+
+```env
+DATABASE_URL=postgresql+psycopg://user:password@db-host:5432/t2_schedule
+JWT_SECRET_KEY=replace_with_a_long_random_secret_at_least_32_chars
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+CORS_ORIGINS=https://api.example.com,https://app.example.com
+APP_ENV=production
+LOG_LEVEL=info
+WEB_CONCURRENCY=2
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+DB_POOL_TIMEOUT=30
+DB_POOL_RECYCLE=1800
+API_IMAGE=registry.example.com/planerka_t2/api:2026-04-26
+```
+
+### 3. Pull image if needed
+
 ```bash
-docker compose up --build -d
+docker pull registry.example.com/planerka_t2/api:2026-04-26
 ```
 
-Check status:
+If you use another tag, replace it in both the command and `.env.prod`.
+
+### 4. Run migration job only
+
+This is the safest first step before bringing traffic online:
+
 ```bash
-docker compose ps
-docker compose logs backend --tail=100
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 ```
 
-## 5. Load Demo Data
+### 5. Start reverse proxy and API
+
+Start the stack with at least two API containers:
+
 ```bash
-docker compose exec backend python seed_demo.py
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --scale api=2 reverse-proxy api
 ```
 
-Demo accounts:
-- `admin@t2.demo / password123`
-- `manager@t2.demo / password123`
-- `employee1@t2.demo / password123`
+### 6. Check container status
 
-## 6. Smoke Check
-Open:
-- `http://<VPS_IP>:8000/health`
-- `http://<VPS_IP>:8000/docs`
-
-Or from server:
 ```bash
-curl http://127.0.0.1:8000/health
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 ```
 
-## 7. Recommended Nginx Setup
-Put Nginx in front of FastAPI and terminate TLS there.
+You should see:
 
-Minimal reverse proxy:
-```nginx
-server {
-    listen 80;
-    server_name api.example.com;
+- one completed `migrate`
+- two running `api` containers
+- one running `reverse-proxy`
 
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+### 7. Check logs
 
-Then issue TLS with Let's Encrypt.
+Migration logs:
 
-## 8. Production Notes
-- Do not keep default `JWT_SECRET_KEY`
-- Do not expose PostgreSQL publicly if not needed
-- Restrict `CORS_ORIGINS`
-- Back up PostgreSQL volume
-- Consider disabling public `/docs` in strict production environments
-- Prefer running behind HTTPS only
-
-## 9. Update Deployment
 ```bash
-git pull
-docker compose up --build -d
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs migrate --tail=100
 ```
+
+Proxy logs:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs reverse-proxy --tail=100
+```
+
+API logs:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs api --tail=100
+```
+
+### 8. Verify liveness and readiness through the proxy
+
+From the host:
+
+```bash
+curl -i http://127.0.0.1/live
+curl -i http://127.0.0.1/ready
+curl -i http://127.0.0.1/health
+```
+
+Expected:
+
+- `/live` returns `200`
+- `/ready` returns `200` only if DB is reachable
+- response headers include `X-Upstream-Addr`
+
+### 9. Verify that the proxy sees multiple API containers
+
+Check Docker DNS from inside the proxy container:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec reverse-proxy getent hosts api
+```
+
+You should see more than one IP when `api` is scaled to 2 or more replicas.
+
+### 10. Verify request distribution across API replicas
+
+Run several requests and inspect `X-Upstream-Addr`:
+
+```bash
+for i in 1 2 3 4 5 6 7 8; do
+  curl -s -D - http://127.0.0.1/ready -o /dev/null | grep X-Upstream-Addr
+done
+```
+
+If the proxy is resolving multiple backend containers correctly, you should observe at least two backend addresses over repeated requests.
+
+### 11. Stop or restart the production stack
+
+Stop:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml down
+```
+
+Restart:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --scale api=2 reverse-proxy api
+```
+
+### 12. Roll out a new image version
+
+Update the tag in `.env.prod`, then:
+
+```bash
+docker pull registry.example.com/planerka_t2/api:<new-tag>
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --scale api=2 reverse-proxy api
+```
+
+### 13. Local production-like verification with the existing local Postgres
+
+If you want to test the prod compose locally against the already running host PostgreSQL port `5432`, create:
+
+```bash
+cat > .env.prod.local <<'EOF'
+DATABASE_URL=postgresql+psycopg://postgres:qxnN3eYqomMBDXF9OupKTQzKZczVhvxs4vPvSZZ3oU8@host.docker.internal:5432/t2_schedule
+JWT_SECRET_KEY=replace_with_a_long_random_secret_at_least_32_chars
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+CORS_ORIGINS=http://localhost,http://127.0.0.1
+APP_ENV=production
+LOG_LEVEL=info
+WEB_CONCURRENCY=2
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+DB_POOL_TIMEOUT=30
+DB_POOL_RECYCLE=1800
+API_IMAGE=planerka_t2-backend:latest
+EOF
+```
+
+Then run:
+
+```bash
+docker compose --env-file .env.prod.local -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.prod.local -f docker-compose.prod.yml up -d --scale api=2 reverse-proxy api
+docker compose --env-file .env.prod.local -f docker-compose.prod.yml ps
+```
+
+And verify:
+
+```bash
+curl -i http://127.0.0.1/live
+curl -i http://127.0.0.1/ready
+for i in 1 2 3 4 5 6 7 8; do
+  curl -s -D - http://127.0.0.1/ready -o /dev/null | grep X-Upstream-Addr
+done
+```
+
+## Stack layout
+
+- `migrate` runs Alembic `upgrade head`
+- `api` serves FastAPI with multiple workers
+- `reverse-proxy` terminates incoming HTTP traffic and forwards to scaled API containers
+
+## Health Endpoints
+
+- `GET /health` - generic health information
+- `GET /live` - process liveness
+- `GET /ready` - readiness with DB connectivity check
+
+## Notes
+
+- runtime schema creation was removed from app startup
+- Excel export no longer writes to container-local temporary files
+- for real horizontal scaling, keep PostgreSQL outside the compose lifecycle
+- the production compose is designed to be scaled with:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --scale api=2 reverse-proxy api
+```
+
+- `deploy.replicas` is not used as the scaling mechanism because plain Docker Compose ignores Swarm-style replica management; `--scale api=2` is the effective command

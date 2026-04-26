@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from config import settings
-from db import Base, engine
+from db import check_db_connection
 from routes_admin import router as admin_router
 from routes_auth import router as auth_router
 from routes_export import router as export_router
@@ -39,7 +39,6 @@ def create_app() -> FastAPI:
         ],
     )
 
-    Base.metadata.create_all(bind=engine)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins or ["*"],
@@ -63,6 +62,20 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["system"])
     def health_check():
         return {"status": "ok", "env": settings.APP_ENV}
+
+    @app.get("/live", tags=["system"])
+    def live_check():
+        return {"status": "alive"}
+
+    @app.get("/ready", tags=["system"])
+    def ready_check():
+        if not check_db_connection():
+            return Response(
+                content='{"status":"not_ready","database":"unreachable"}',
+                status_code=503,
+                media_type="application/json",
+            )
+        return {"status": "ready", "database": "ok"}
 
     app.include_router(auth_router)
     app.include_router(schedule_router)

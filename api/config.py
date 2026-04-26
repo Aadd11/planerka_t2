@@ -12,8 +12,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:8080"
-    EXPORT_DIR: str = "/tmp"
     APP_ENV: str = "development"
+    LOG_LEVEL: str = "info"
+    WEB_CONCURRENCY: int = 2
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     @property
     def cors_origins(self) -> list[str]:

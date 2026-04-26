@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-import tempfile
+from io import BytesIO
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
 from auth import require_role
-from config import settings
 from constants import UserRole
 from db import get_db
 from models import CollectionPeriod, ScheduleEntry, User
@@ -35,7 +33,7 @@ def _resolve_period(db: Session, current_user: User, period_id: int | None) -> C
     return period
 
 
-def _build_workbook(db: Session, period: CollectionPeriod) -> Path:
+def _build_workbook(db: Session, period: CollectionPeriod) -> BytesIO:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "schedule"
@@ -125,32 +123,26 @@ def _build_workbook(db: Session, period: CollectionPeriod) -> Path:
                 ]
             )
 
-    export_dir = Path(settings.EXPORT_DIR)
-    export_dir.mkdir(parents=True, exist_ok=True)
-    temp_file = tempfile.NamedTemporaryFile(
-        suffix=".xlsx",
-        prefix="schedule_",
-        dir=export_dir,
-        delete=False,
-    )
-    temp_path = Path(temp_file.name)
-    temp_file.close()
-    workbook.save(temp_path)
-    return temp_path
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
 
 
 @router.get("/schedule", summary="Экспорт расписаний в Excel")
 def export_schedule(
-    background_tasks: BackgroundTasks,
     period_id: int | None = Query(default=None, alias="period_id"),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
     period = _resolve_period(db, current_user, period_id)
-    file_path = _build_workbook(db, period)
-    background_tasks.add_task(file_path.unlink, missing_ok=True)
-    return FileResponse(
-        file_path,
+    file_obj = _build_workbook(db, period)
+    return StreamingResponse(
+        file_obj,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=f"schedule_{period.alliance}_{period.period_start}_{period.period_end}.xlsx",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="schedule_{period.alliance}_{period.period_start}_{period.period_end}.xlsx"'
+            )
+        },
     )
