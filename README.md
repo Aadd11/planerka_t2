@@ -24,8 +24,8 @@ If the frontend is served from a new VPS/domain, add that origin to backend `COR
 ```env
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080,https://your-frontend-domain.example
 ```
+## Backend
 
-Quick start:
 - [api/README.md](./api/README.md) — основная документация по backend API
 - [API.md](./API.md) — подробное описание endpoint'ов
 - [api/DEPLOY.md](./api/DEPLOY.md) — инструкция по деплою и запуску production-стека
