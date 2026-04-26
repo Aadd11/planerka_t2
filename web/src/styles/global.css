@@ -689,17 +689,54 @@ td small {
 }
 
 .profile-card {
-  max-width: 760px;
+  max-width: 860px;
+  border-radius: 18px;
+  padding: 28px;
 }
 
-.profile-card dl {
+.profile-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 22px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--t2-line);
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+}
+
+.profile-card__head h2 {
+  font-size: 38px;
+  line-height: 1;
+  margin: 6px 0 10px;
+}
+
+.profile-card__head span {
+  color: var(--t2-muted);
+}
+
+.profile-list {
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.profile-list div {
+  border: 1px solid var(--t2-line);
+  border-radius: 12px;
+  min-height: 76px;
+  padding: 14px 16px;
 }
 
 .profile-card dt {
   color: var(--t2-muted);
+  margin-bottom: 6px;
+}
+
+.profile-card dd {
+  font-weight: 500;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-grid {
@@ -984,9 +1021,7 @@ td small {
   }
 
   .employee-grid,
-  .manager-grid,
   .admin-grid,
-  .export-grid,
   .auth-card {
     grid-template-columns: 1fr;
   }
@@ -1032,8 +1067,13 @@ td small {
   }
 
   .review-grid,
-  .form-pair {
+  .form-pair,
+  .profile-list {
     grid-template-columns: 1fr;
+  }
+
+  .profile-card__head {
+    display: grid;
   }
 
   .review-drawer {
