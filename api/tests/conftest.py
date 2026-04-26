@@ -12,7 +12,8 @@ if TEST_DB_PATH.exists():
     TEST_DB_PATH.unlink()
 
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
-os.environ["JWT_SECRET_KEY"] = "test-secret"
+os.environ["JWT_SECRET_KEY"] = "test-secret-that-is-long-enough-for-tests"
+os.environ["APP_ENV"] = "test"
 
 from auth import create_access_token, get_password_hash  # noqa: E402
 from constants import UserRole  # noqa: E402
